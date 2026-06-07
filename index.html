@@ -488,6 +488,13 @@
     <div class="nav-item" onclick="goto('completable',this)"><span class="dot"></span>CompletableFuture</div>
     <div class="nav-item" onclick="goto('collections',this)"><span class="dot"></span>Concurrent Collections</div>
 
+    <div class="nav-section">Deep Dives</div>
+    <div class="nav-item" onclick="goto('runnable_deep',this)"><span class="dot"></span>Runnable — Deep Dive</div>
+    <div class="nav-item" onclick="goto('callable_deep',this)"><span class="dot"></span>Callable — Deep Dive</div>
+    <div class="nav-item" onclick="goto('future_deep',this)"><span class="dot"></span>Future — Deep Dive</div>
+    <div class="nav-item" onclick="goto('completable_deep',this)"><span class="dot"></span>CompletableFuture — Deep Dive</div>
+    <div class="nav-item" onclick="goto('forkjoin',this)"><span class="dot"></span>ForkJoinPool & Parallelism</div>
+
     <div class="nav-section">Production Patterns</div>
     <div class="nav-item" onclick="goto('problems',this)"><span class="dot"></span>Deadlock & Race Conditions</div>
     <div class="nav-item" onclick="goto('threadpool',this)"><span class="dot"></span>Thread Pool Tuning</div>
@@ -511,8 +518,8 @@
   </div>
 
   <div class="hero-stats">
-    <div class="stat"><div class="stat-num">12</div><div class="stat-label">Core Topics</div></div>
-    <div class="stat"><div class="stat-num">30+</div><div class="stat-label">Code Examples</div></div>
+    <div class="stat"><div class="stat-num">18</div><div class="stat-label">Core Topics</div></div>
+    <div class="stat"><div class="stat-num">60+</div><div class="stat-label">Code Examples</div></div>
     <div class="stat"><div class="stat-num">8</div><div class="stat-label">Yrs Relevance</div></div>
     <div class="stat"><div class="stat-num">∞</div><div class="stat-label">Production Use</div></div>
   </div>
@@ -1548,11 +1555,929 @@ spring.threads.virtual.enabled=true
   </div>
 </section>
 
+
+
+<!-- ===== RUNNABLE DEEP DIVE ===== -->
+<section class="section" id="runnable_deep">
+  <div class="section-header">
+    <div class="section-tag">Deep Dive 01 — Runnable</div>
+    <h1 class="section-title">Runnable<br>Deep Dive</h1>
+    <p class="section-desc">Runnable is the most fundamental task abstraction in Java concurrency. It represents a unit of work with no return value and no checked exception. Simple, powerful, ubiquitous.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> The Interface</div>
+      <p>Runnable is a <strong>@FunctionalInterface</strong> with a single method <code>run()</code>. It's been in Java since version 1.0 and is the DNA of every thread and executor task.</p>
+    </div>
+    <div class="card accent2">
+      <div class="card-title"><span class="icon">⚠️</span> Limitations</div>
+      <ul class="feature-list">
+        <li>Cannot return a result</li>
+        <li>Cannot throw checked exceptions</li>
+        <li>No built-in cancellation token</li>
+        <li>No way to know if it completed successfully</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>1. The Interface Definition</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">Runnable.java</span><span class="code-lang">JDK SOURCE</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="ann">@FunctionalInterface</span>
+<span class="kw">public interface</span> <span class="cls">Runnable</span> {
+    <span class="kw">public abstract void</span> <span class="fn">run</span>(); <span class="cmt">// no return, no checked exception</span>
+}</pre>
+  </div>
+
+  <h2>2. All Ways to Create a Runnable</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">RunnableVariants.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// ── Way 1: Anonymous class (pre-Java 8) ──────────────────────────────</span>
+<span class="cls">Runnable</span> r1 = <span class="kw">new</span> <span class="cls">Runnable</span>() {
+    <span class="ann">@Override</span>
+    <span class="kw">public void</span> <span class="fn">run</span>() {
+        <span class="cls">System</span>.out.<span class="fn">println</span>(<span class="str">"Anonymous Runnable on: "</span> + <span class="cls">Thread</span>.currentThread().<span class="fn">getName</span>());
+    }
+};
+
+<span class="cmt">// ── Way 2: Named class implementing Runnable ──────────────────────────</span>
+<span class="kw">public class</span> <span class="cls">ReportGenerator</span> <span class="kw">implements</span> <span class="cls">Runnable</span> {
+    <span class="kw">private final</span> <span class="cls">String</span> reportId;
+    <span class="kw">public</span> <span class="fn">ReportGenerator</span>(<span class="cls">String</span> reportId) { <span class="kw">this</span>.reportId = reportId; }
+
+    <span class="ann">@Override</span>
+    <span class="kw">public void</span> <span class="fn">run</span>() {
+        <span class="cls">System</span>.out.<span class="fn">println</span>(<span class="str">"Generating report: "</span> + reportId);
+        <span class="cmt">// business logic here</span>
+    }
+}
+
+<span class="cmt">// ── Way 3: Lambda (Java 8+) — most concise ───────────────────────────</span>
+<span class="cls">Runnable</span> r3 = () -> <span class="cls">System</span>.out.<span class="fn">println</span>(<span class="str">"Lambda Runnable"</span>);
+
+<span class="cmt">// ── Way 4: Method reference ───────────────────────────────────────────</span>
+<span class="cls">Runnable</span> r4 = <span class="cls">MyService</span>::<span class="fn">process</span>;  <span class="cmt">// static method reference</span>
+<span class="cls">Runnable</span> r5 = myObj::<span class="fn">doWork</span>;       <span class="cmt">// instance method reference</span>
+
+<span class="cmt">// ── Submitting to threads ─────────────────────────────────────────────</span>
+<span class="kw">new</span> <span class="cls">Thread</span>(r3, <span class="str">"worker-1"</span>).<span class="fn">start</span>();
+
+<span class="cls">ExecutorService</span> exec = <span class="cls">Executors</span>.<span class="fn">newFixedThreadPool</span>(<span class="num">4</span>);
+exec.<span class="fn">execute</span>(r3);      <span class="cmt">// fire-and-forget (no Future)</span>
+exec.<span class="fn">submit</span>(r3);       <span class="cmt">// returns Future&lt;?&gt; (null result, but trackable)</span></pre>
+  </div>
+
+  <h2>3. Chaining Runnables (Composition Pattern)</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">RunnableComposition.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// Compose multiple Runnables into a pipeline</span>
+<span class="kw">public static</span> <span class="cls">Runnable</span> <span class="fn">chain</span>(<span class="cls">Runnable</span>... tasks) {
+    <span class="kw">return</span> () -> {
+        <span class="kw">for</span> (<span class="cls">Runnable</span> task : tasks) {
+            task.<span class="fn">run</span>();
+        }
+    };
+}
+
+<span class="cls">Runnable</span> pipeline = <span class="fn">chain</span>(
+    () -> <span class="fn">validateInput</span>(),
+    () -> <span class="fn">transformData</span>(),
+    () -> <span class="fn">writeToDatabase</span>(),
+    () -> <span class="fn">sendNotification</span>()
+);
+executor.<span class="fn">execute</span>(pipeline);
+
+<span class="cmt">// Runnable with timeout wrapper</span>
+<span class="kw">public static</span> <span class="cls">Runnable</span> <span class="fn">withTimeout</span>(<span class="cls">Runnable</span> task, <span class="kw">long</span> timeoutMs) {
+    <span class="kw">return</span> () -> {
+        <span class="cls">Future</span>&lt;?&gt; f = <span class="cls">Executors</span>.<span class="fn">newSingleThreadExecutor</span>().<span class="fn">submit</span>(task);
+        <span class="kw">try</span> {
+            f.<span class="fn">get</span>(timeoutMs, <span class="cls">TimeUnit</span>.<span class="fn">MILLISECONDS</span>);
+        } <span class="kw">catch</span> (<span class="cls">TimeoutException</span> e) {
+            f.<span class="fn">cancel</span>(<span class="kw">true</span>);
+            <span class="kw">throw new</span> <span class="cls">RuntimeException</span>(<span class="str">"Task timed out after "</span> + timeoutMs + <span class="str">"ms"</span>);
+        } <span class="kw">catch</span> (<span class="cls">Exception</span> e) {
+            <span class="kw">throw new</span> <span class="cls">RuntimeException</span>(e);
+        }
+    };
+}</pre>
+  </div>
+
+  <h2>4. Runnable with Exception Handling (Production Pattern)</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">SafeRunnable.java</span><span class="code-lang">JAVA — Production</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// Problem: uncaught exceptions in Runnable silently kill the thread</span>
+<span class="cmt">// Solution: wrap with error handling</span>
+
+<span class="ann">@FunctionalInterface</span>
+<span class="kw">public interface</span> <span class="cls">CheckedRunnable</span> {
+    <span class="kw">void</span> <span class="fn">run</span>() <span class="kw">throws</span> <span class="cls">Exception</span>;
+
+    <span class="kw">static</span> <span class="cls">Runnable</span> <span class="fn">of</span>(<span class="cls">CheckedRunnable</span> cr) {
+        <span class="kw">return</span> () -> {
+            <span class="kw">try</span> {
+                cr.<span class="fn">run</span>();
+            } <span class="kw">catch</span> (<span class="cls">Exception</span> e) {
+                <span class="kw">throw new</span> <span class="cls">RuntimeException</span>(e);
+            }
+        };
+    }
+}
+
+<span class="cmt">// Usage — now you can throw checked exceptions</span>
+<span class="cls">Runnable</span> safeTask = <span class="cls">CheckedRunnable</span>.<span class="fn">of</span>(() -> {
+    <span class="fn">riskyMethodThatThrows</span>(); <span class="cmt">// checked exception OK here</span>
+});
+
+<span class="cmt">// Global UncaughtExceptionHandler — catch what slips through</span>
+<span class="cls">Thread</span>.setDefaultUncaughtExceptionHandler((thread, ex) -> {
+    log.<span class="fn">error</span>(<span class="str">"Uncaught exception in thread [{}]: {}"</span>, thread.getName(), ex.getMessage(), ex);
+    metrics.<span class="fn">increment</span>(<span class="str">"thread.uncaught_exception"</span>);
+});
+
+<span class="cmt">// Per-executor UncaughtExceptionHandler via ThreadFactory</span>
+<span class="cls">ThreadFactory</span> factory = r -> {
+    <span class="cls">Thread</span> t = <span class="kw">new</span> <span class="cls">Thread</span>(r);
+    t.<span class="fn">setName</span>(<span class="str">"safe-worker-"</span> + t.<span class="fn">getId</span>());
+    t.<span class="fn">setUncaughtExceptionHandler</span>((th, ex) ->
+        log.<span class="fn">error</span>(<span class="str">"Worker [{}] failed: {}"</span>, th.getName(), ex));
+    <span class="kw">return</span> t;
+};</pre>
+  </div>
+
+  <h2>5. Runnable vs Runnable — Key Design Patterns</h2>
+  <div class="grid2">
+    <div class="card accent3">
+      <div class="card-title">Decorator Pattern</div>
+      <p>Wrap a Runnable with cross-cutting concerns like logging, metrics, MDC propagation, retry logic — without modifying the original task.</p>
+      <pre style="font-size:0.72rem;color:#cdd6f4;margin-top:10px;font-family:'JetBrains Mono',monospace;line-height:1.6;"><span class="kw">public static</span> <span class="cls">Runnable</span> <span class="fn">withMDC</span>(<span class="cls">Runnable</span> task) {
+    <span class="cls">Map</span>&lt;?,?&gt; ctx = <span class="cls">MDC</span>.<span class="fn">getCopyOfContextMap</span>();
+    <span class="kw">return</span> () -> {
+        <span class="cls">MDC</span>.<span class="fn">setContextMap</span>(ctx); <span class="cmt">// propagate context</span>
+        <span class="kw">try</span> { task.<span class="fn">run</span>(); }
+        <span class="kw">finally</span> { <span class="cls">MDC</span>.<span class="fn">clear</span>(); }
+    };
+}</pre>
+    </div>
+    <div class="card accent4">
+      <div class="card-title">Retry Wrapper</div>
+      <pre style="font-size:0.72rem;color:#cdd6f4;margin-top:10px;font-family:'JetBrains Mono',monospace;line-height:1.6;"><span class="kw">public static</span> <span class="cls">Runnable</span> <span class="fn">withRetry</span>(<span class="cls">Runnable</span> task, <span class="kw">int</span> maxRetries) {
+    <span class="kw">return</span> () -> {
+        <span class="kw">int</span> attempts = <span class="num">0</span>;
+        <span class="kw">while</span> (<span class="kw">true</span>) {
+            <span class="kw">try</span> { task.<span class="fn">run</span>(); <span class="kw">return</span>; }
+            <span class="kw">catch</span> (<span class="cls">Exception</span> e) {
+                <span class="kw">if</span> (++attempts >= maxRetries) <span class="kw">throw</span> e;
+                <span class="cls">Thread</span>.<span class="fn">sleep</span>(<span class="num">100</span> * attempts);
+            }
+        }
+    };
+}</pre>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">💡</span>
+    <div><strong>When to use Runnable:</strong> Fire-and-forget tasks, background jobs, event handlers, tasks submitted to ExecutorService when you don't need the result. If you need a return value or to propagate checked exceptions — upgrade to <strong>Callable</strong>.</div>
+  </div>
+</section>
+
+<!-- ===== CALLABLE DEEP DIVE ===== -->
+<section class="section" id="callable_deep">
+  <div class="section-header">
+    <div class="section-tag">Deep Dive 02 — Callable</div>
+    <h1 class="section-title">Callable<br>Deep Dive</h1>
+    <p class="section-desc">Callable&lt;V&gt; is Runnable's powerful sibling — it returns a result and can throw checked exceptions. It's the task type designed to work with Future and ExecutorService.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Interface Definition</div>
+      <pre style="font-size:0.75rem;color:#cdd6f4;margin-top:10px;font-family:'JetBrains Mono',monospace;line-height:1.6;"><span class="ann">@FunctionalInterface</span>
+<span class="kw">public interface</span> <span class="cls">Callable</span>&lt;<span class="typ">V</span>&gt; {
+    <span class="typ">V</span> <span class="fn">call</span>() <span class="kw">throws</span> <span class="cls">Exception</span>;
+    <span class="cmt">// returns V, throws checked exception</span>
+}</pre>
+    </div>
+    <div class="card accent4">
+      <div class="card-title"><span class="icon">✅</span> Callable vs Runnable</div>
+      <table style="width:100%;font-size:0.78rem;border-collapse:collapse;margin-top:8px;">
+        <tr style="color:var(--accent);font-size:0.65rem;letter-spacing:1px;"><th style="text-align:left;padding:4px 8px;">Feature</th><th style="text-align:left;padding:4px 8px;">Runnable</th><th style="text-align:left;padding:4px 8px;">Callable</th></tr>
+        <tr style="color:var(--text-dim);border-top:1px solid var(--border);"><td style="padding:5px 8px;">Return value</td><td style="padding:5px 8px;">❌ void</td><td style="padding:5px 8px;">✅ V</td></tr>
+        <tr style="color:var(--text-dim);border-top:1px solid var(--border);"><td style="padding:5px 8px;">Checked exceptions</td><td style="padding:5px 8px;">❌ No</td><td style="padding:5px 8px;">✅ Yes</td></tr>
+        <tr style="color:var(--text-dim);border-top:1px solid var(--border);"><td style="padding:5px 8px;">Works with Thread</td><td style="padding:5px 8px;">✅ Yes</td><td style="padding:5px 8px;">❌ No</td></tr>
+        <tr style="color:var(--text-dim);border-top:1px solid var(--border);"><td style="padding:5px 8px;">Works with Executor</td><td style="padding:5px 8px;">✅ Yes</td><td style="padding:5px 8px;">✅ Yes</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>1. Basic Callable Usage</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CallableBasics.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// ── Named class ───────────────────────────────────────────────────────</span>
+<span class="kw">public class</span> <span class="cls">StockPriceTask</span> <span class="kw">implements</span> <span class="cls">Callable</span>&lt;<span class="cls">BigDecimal</span>&gt; {
+    <span class="kw">private final</span> <span class="cls">String</span> symbol;
+    <span class="kw">public</span> <span class="fn">StockPriceTask</span>(<span class="cls">String</span> symbol) { <span class="kw">this</span>.symbol = symbol; }
+
+    <span class="ann">@Override</span>
+    <span class="kw">public</span> <span class="cls">BigDecimal</span> <span class="fn">call</span>() <span class="kw">throws</span> <span class="cls">Exception</span> { <span class="cmt">// checked exception allowed!</span>
+        <span class="kw">return</span> marketDataApi.<span class="fn">getPrice</span>(symbol); <span class="cmt">// IOException, etc. — no problem</span>
+    }
+}
+
+<span class="cmt">// ── Lambda (most common) ──────────────────────────────────────────────</span>
+<span class="cls">Callable</span>&lt;<span class="cls">List</span>&lt;<span class="cls">Order</span>&gt;&gt; fetchOrders = () -> {
+    <span class="kw">return</span> orderRepo.<span class="fn">findByStatus</span>(<span class="str">"PENDING"</span>); <span class="cmt">// can throw SQLException etc.</span>
+};
+
+<span class="cls">ExecutorService</span> executor = <span class="cls">Executors</span>.<span class="fn">newFixedThreadPool</span>(<span class="num">10</span>);
+<span class="cls">Future</span>&lt;<span class="cls">List</span>&lt;<span class="cls">Order</span>&gt;&gt; future = executor.<span class="fn">submit</span>(fetchOrders);
+
+<span class="cmt">// Retrieve result — blocks until available</span>
+<span class="cls">List</span>&lt;<span class="cls">Order</span>&gt; orders = future.<span class="fn">get</span>(<span class="num">5</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);</pre>
+  </div>
+
+  <h2>2. Parallel Execution of Multiple Callables</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ParallelCallables.java</span><span class="code-lang">JAVA — Production Pattern</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// Fetch multiple data sources in parallel — aggregate dashboard</span>
+<span class="cls">ExecutorService</span> exec = <span class="cls">Executors</span>.<span class="fn">newFixedThreadPool</span>(<span class="num">8</span>);
+
+<span class="cls">List</span>&lt;<span class="cls">Callable</span>&lt;<span class="cls">Object</span>&gt;&gt; tasks = <span class="cls">Arrays</span>.<span class="fn">asList</span>(
+    () -> userService.<span class="fn">getProfile</span>(userId),      <span class="cmt">// hits user-service</span>
+    () -> orderService.<span class="fn">getRecentOrders</span>(userId), <span class="cmt">// hits order-service</span>
+    () -> walletService.<span class="fn">getBalance</span>(userId),     <span class="cmt">// hits wallet-service</span>
+    () -> loyaltyService.<span class="fn">getPoints</span>(userId)      <span class="cmt">// hits loyalty-service</span>
+);
+
+<span class="cmt">// invokeAll — waits for ALL, respects timeout</span>
+<span class="cls">List</span>&lt;<span class="cls">Future</span>&lt;<span class="cls">Object</span>&gt;&gt; results = exec.<span class="fn">invokeAll</span>(tasks, <span class="num">3</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+
+<span class="cls">DashboardDTO</span> dto = <span class="kw">new</span> <span class="cls">DashboardDTO</span>();
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i < results.<span class="fn">size</span>(); i++) {
+    <span class="kw">try</span> {
+        <span class="kw">if</span> (!results.<span class="fn">get</span>(i).<span class="fn">isCancelled</span>()) {
+            dto.<span class="fn">setField</span>(i, results.<span class="fn">get</span>(i).<span class="fn">get</span>()); <span class="cmt">// non-blocking here, already done</span>
+        }
+    } <span class="kw">catch</span> (<span class="cls">ExecutionException</span> e) {
+        log.<span class="fn">warn</span>(<span class="str">"Task {} failed: {}"</span>, i, e.getCause().<span class="fn">getMessage</span>());
+        dto.<span class="fn">setFieldFallback</span>(i); <span class="cmt">// graceful degradation</span>
+    }
+}
+
+<span class="cmt">// invokeAny — returns FIRST successful result (race pattern)</span>
+<span class="cls">List</span>&lt;<span class="cls">Callable</span>&lt;<span class="cls">String</span>&gt;&gt; mirrors = <span class="cls">List</span>.<span class="fn">of</span>(
+    () -> <span class="fn">fetchFromPrimaryDC</span>(),
+    () -> <span class="fn">fetchFromSecondaryDC</span>(),
+    () -> <span class="fn">fetchFromCacheFallback</span>()
+);
+<span class="cls">String</span> data = exec.<span class="fn">invokeAny</span>(mirrors, <span class="num">2</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+<span class="cmt">// First one to succeed wins; others are cancelled automatically</span></pre>
+  </div>
+
+  <h2>3. Generic Retry Callable (Production Utility)</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">RetryableCallable.java</span><span class="code-lang">JAVA — Production</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="kw">public class</span> <span class="cls">RetryableCallable</span>&lt;<span class="typ">T</span>&gt; <span class="kw">implements</span> <span class="cls">Callable</span>&lt;<span class="typ">T</span>&gt; {
+
+    <span class="kw">private final</span> <span class="cls">Callable</span>&lt;<span class="typ">T</span>&gt; delegate;
+    <span class="kw">private final</span> <span class="kw">int</span>         maxAttempts;
+    <span class="kw">private final</span> <span class="kw">long</span>        backoffMs;
+
+    <span class="kw">public</span> <span class="fn">RetryableCallable</span>(<span class="cls">Callable</span>&lt;<span class="typ">T</span>&gt; delegate, <span class="kw">int</span> maxAttempts, <span class="kw">long</span> backoffMs) {
+        <span class="kw">this</span>.delegate    = delegate;
+        <span class="kw">this</span>.maxAttempts = maxAttempts;
+        <span class="kw">this</span>.backoffMs   = backoffMs;
+    }
+
+    <span class="ann">@Override</span>
+    <span class="kw">public</span> <span class="typ">T</span> <span class="fn">call</span>() <span class="kw">throws</span> <span class="cls">Exception</span> {
+        <span class="cls">Exception</span> last = <span class="kw">null</span>;
+        <span class="kw">for</span> (<span class="kw">int</span> attempt = <span class="num">1</span>; attempt <= maxAttempts; attempt++) {
+            <span class="kw">try</span> {
+                <span class="kw">return</span> delegate.<span class="fn">call</span>();
+            } <span class="kw">catch</span> (<span class="cls">Exception</span> e) {
+                last = e;
+                log.<span class="fn">warn</span>(<span class="str">"Attempt {}/{} failed: {}"</span>, attempt, maxAttempts, e.getMessage());
+                <span class="kw">if</span> (attempt < maxAttempts) {
+                    <span class="cls">Thread</span>.<span class="fn">sleep</span>(backoffMs * attempt); <span class="cmt">// exponential backoff</span>
+                }
+            }
+        }
+        <span class="kw">throw new</span> <span class="cls">RuntimeException</span>(<span class="str">"All "</span> + maxAttempts + <span class="str">" attempts failed"</span>, last);
+    }
+
+    <span class="cmt">// Usage</span>
+    <span class="kw">public static void</span> <span class="fn">main</span>(<span class="cls">String</span>[] args) <span class="kw">throws</span> <span class="cls">Exception</span> {
+        <span class="cls">Callable</span>&lt;<span class="cls">String</span>&gt; fetchConfig = <span class="kw">new</span> <span class="cls">RetryableCallable</span>&lt;&gt;(
+            () -> configService.<span class="fn">fetch</span>(<span class="str">"db.url"</span>),
+            <span class="num">3</span>,    <span class="cmt">// 3 attempts</span>
+            <span class="num">200L</span>  <span class="cmt">// 200ms base backoff</span>
+        );
+        <span class="cls">String</span> url = executor.<span class="fn">submit</span>(fetchConfig).<span class="fn">get</span>();
+    }
+}</pre>
+  </div>
+
+  <h2>4. Typed Callable Factory Pattern</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CallableFactory.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// Build Callables with fluent API — useful in batch processing</span>
+<span class="kw">public class</span> <span class="cls">BatchTaskBuilder</span>&lt;<span class="typ">T</span>&gt; {
+
+    <span class="kw">public static</span> &lt;<span class="typ">T</span>&gt; <span class="cls">List</span>&lt;<span class="cls">Callable</span>&lt;<span class="typ">T</span>&gt;&gt; <span class="fn">partition</span>(<span class="cls">List</span>&lt;<span class="cls">String</span>&gt; ids,
+                                                    <span class="cls">Function</span>&lt;<span class="cls">String</span>, <span class="typ">T</span>&gt; processor) {
+        <span class="kw">return</span> ids.<span class="fn">stream</span>()
+            .<span class="fn">map</span>(id -> (<span class="cls">Callable</span>&lt;<span class="typ">T</span>&gt;) () -> processor.<span class="fn">apply</span>(id))
+            .<span class="fn">collect</span>(<span class="cls">Collectors</span>.<span class="fn">toList</span>());
+    }
+
+    <span class="cmt">// Usage: process 10,000 customer IDs in parallel batches</span>
+    <span class="kw">public static void</span> <span class="fn">main</span>(<span class="cls">String</span>[] args) <span class="kw">throws</span> <span class="cls">Exception</span> {
+        <span class="cls">List</span>&lt;<span class="cls">String</span>&gt; customerIds = <span class="fn">loadAllCustomerIds</span>(); <span class="cmt">// 10,000 ids</span>
+
+        <span class="cls">List</span>&lt;<span class="cls">Callable</span>&lt;<span class="cls">CustomerReport</span>&gt;&gt; tasks =
+            <span class="cls">BatchTaskBuilder</span>.<span class="fn">partition</span>(customerIds, id -> {
+                <span class="cls">Customer</span> c = customerRepo.<span class="fn">findById</span>(id);
+                <span class="kw">return</span> reportService.<span class="fn">generate</span>(c);
+            });
+
+        <span class="cls">List</span>&lt;<span class="cls">Future</span>&lt;<span class="cls">CustomerReport</span>&gt;&gt; futures =
+            executor.<span class="fn">invokeAll</span>(tasks, <span class="num">30</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+
+        <span class="cls">List</span>&lt;<span class="cls">CustomerReport</span>&gt; reports = futures.<span class="fn">stream</span>()
+            .<span class="fn">filter</span>(f -> !f.<span class="fn">isCancelled</span>())
+            .<span class="fn">map</span>(f -> { <span class="kw">try</span> { <span class="kw">return</span> f.<span class="fn">get</span>(); } <span class="kw">catch</span>(<span class="cls">Exception</span> e) { <span class="kw">return null</span>; } })
+            .<span class="fn">filter</span>(<span class="cls">Objects</span>::<span class="fn">nonNull</span>)
+            .<span class="fn">collect</span>(<span class="cls">Collectors</span>.<span class="fn">toList</span>());
+    }
+}</pre>
+  </div>
+</section>
+
+<!-- ===== FUTURE DEEP DIVE ===== -->
+<section class="section" id="future_deep">
+  <div class="section-header">
+    <div class="section-tag">Deep Dive 03 — Future</div>
+    <h1 class="section-title">Future&lt;V&gt;<br>Deep Dive</h1>
+    <p class="section-desc">Future represents the result of an asynchronous computation. It's a handle to a task running elsewhere — poll it, cancel it, or block on it. The predecessor to CompletableFuture.</p>
+  </div>
+
+  <h2>1. The Full Future API</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">FutureAPI.java</span><span class="code-lang">JDK SOURCE + EXAMPLES</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="kw">public interface</span> <span class="cls">Future</span>&lt;<span class="typ">V</span>&gt; {
+    <span class="typ">V</span>       <span class="fn">get</span>() <span class="kw">throws</span> <span class="cls">InterruptedException</span>, <span class="cls">ExecutionException</span>;
+    <span class="typ">V</span>       <span class="fn">get</span>(<span class="kw">long</span> timeout, <span class="cls">TimeUnit</span> unit) <span class="kw">throws</span> ..., <span class="cls">TimeoutException</span>;
+    <span class="kw">boolean</span> <span class="fn">cancel</span>(<span class="kw">boolean</span> mayInterruptIfRunning);
+    <span class="kw">boolean</span> <span class="fn">isCancelled</span>();
+    <span class="kw">boolean</span> <span class="fn">isDone</span>(); <span class="cmt">// true = completed, cancelled, or threw exception</span>
+}
+
+<span class="cmt">// ── Complete lifecycle example ────────────────────────────────────────</span>
+<span class="cls">ExecutorService</span> exec = <span class="cls">Executors</span>.<span class="fn">newCachedThreadPool</span>();
+
+<span class="cls">Future</span>&lt;<span class="cls">UserProfile</span>&gt; future = exec.<span class="fn">submit</span>(() -> {
+    <span class="cls">Thread</span>.<span class="fn">sleep</span>(<span class="num">2000</span>);
+    <span class="kw">return</span> userService.<span class="fn">fetch</span>(userId);
+});
+
+<span class="cmt">// Poll without blocking</span>
+<span class="kw">while</span> (!future.<span class="fn">isDone</span>()) {
+    <span class="fn">doOtherWork</span>();
+    <span class="cls">Thread</span>.<span class="fn">sleep</span>(<span class="num">100</span>);
+}
+
+<span class="cmt">// Get with timeout (always do this in production)</span>
+<span class="kw">try</span> {
+    <span class="cls">UserProfile</span> user = future.<span class="fn">get</span>(<span class="num">3</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+} <span class="kw">catch</span> (<span class="cls">TimeoutException</span> e) {
+    future.<span class="fn">cancel</span>(<span class="kw">true</span>);         <span class="cmt">// interrupt the running thread</span>
+    <span class="kw">return</span> <span class="fn">fallbackProfile</span>();
+} <span class="kw">catch</span> (<span class="cls">CancellationException</span> e) {
+    log.<span class="fn">info</span>(<span class="str">"Task was cancelled"</span>);
+    <span class="kw">return null</span>;
+} <span class="kw">catch</span> (<span class="cls">ExecutionException</span> e) {
+    <span class="cls">Throwable</span> cause = e.<span class="fn">getCause</span>(); <span class="cmt">// unwrap actual exception</span>
+    <span class="kw">if</span> (cause <span class="kw">instanceof</span> <span class="cls">NotFoundException</span>) <span class="kw">throw</span> (<span class="cls">NotFoundException</span>) cause;
+    <span class="kw">throw new</span> <span class="cls">ServiceException</span>(<span class="str">"User fetch failed"</span>, cause);
+}</pre>
+  </div>
+
+  <h2>2. Managing Multiple Futures</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">MultipleFutures.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// Submit many, collect results — with partial failure handling</span>
+<span class="cls">List</span>&lt;<span class="cls">String</span>&gt; endpoints = <span class="cls">List</span>.<span class="fn">of</span>(<span class="str">"/api/users"</span>, <span class="str">"/api/orders"</span>, <span class="str">"/api/products"</span>);
+
+<span class="cls">Map</span>&lt;<span class="cls">String</span>, <span class="cls">Future</span>&lt;<span class="cls">String</span>&gt;&gt; futureMap = <span class="kw">new</span> <span class="cls">LinkedHashMap</span>&lt;&gt;();
+<span class="kw">for</span> (<span class="cls">String</span> ep : endpoints) {
+    futureMap.<span class="fn">put</span>(ep, exec.<span class="fn">submit</span>(() -> <span class="fn">httpGet</span>(ep)));
+}
+
+<span class="cls">Map</span>&lt;<span class="cls">String</span>, <span class="cls">String</span>&gt; results = <span class="kw">new</span> <span class="cls">HashMap</span>&lt;&gt;();
+<span class="kw">for</span> (<span class="cls">Map</span>.<span class="cls">Entry</span>&lt;<span class="cls">String</span>, <span class="cls">Future</span>&lt;<span class="cls">String</span>&gt;&gt; entry : futureMap.<span class="fn">entrySet</span>()) {
+    <span class="kw">try</span> {
+        results.<span class="fn">put</span>(entry.<span class="fn">getKey</span>(), entry.<span class="fn">getValue</span>().<span class="fn">get</span>(<span class="num">2</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>));
+    } <span class="kw">catch</span> (<span class="cls">Exception</span> e) {
+        results.<span class="fn">put</span>(entry.<span class="fn">getKey</span>(), <span class="str">"ERROR: "</span> + e.<span class="fn">getMessage</span>());
+    }
+}
+
+<span class="cmt">// CompletionService — get results AS THEY COMPLETE (not in submission order)</span>
+<span class="cls">CompletionService</span>&lt;<span class="cls">String</span>&gt; cs = <span class="kw">new</span> <span class="cls">ExecutorCompletionService</span>&lt;&gt;(exec);
+endpoints.<span class="fn">forEach</span>(ep -> cs.<span class="fn">submit</span>(() -> <span class="fn">httpGet</span>(ep)));
+
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i < endpoints.<span class="fn">size</span>(); i++) {
+    <span class="cls">Future</span>&lt;<span class="cls">String</span>&gt; completed = cs.<span class="fn">take</span>(); <span class="cmt">// blocks until next one finishes</span>
+    <span class="cls">System</span>.out.<span class="fn">println</span>(<span class="str">"Got result: "</span> + completed.<span class="fn">get</span>());
+}
+<span class="cmt">// Useful when: first result triggers next step, or you want lowest latency display</span></pre>
+  </div>
+
+  <h2>3. Future Limitations & Why CompletableFuture Was Born</h2>
+  <div class="grid2">
+    <div class="card accent2">
+      <div class="card-title"><span class="icon">❌</span> Future Pain Points</div>
+      <ul class="feature-list">
+        <li><code>get()</code> is blocking — no non-blocking callback</li>
+        <li>Can't chain/compose two Futures easily</li>
+        <li>No way to manually complete a Future</li>
+        <li>No built-in exception recovery</li>
+        <li>No "when all done" or "when any done" primitives</li>
+        <li>No way to combine results of multiple Futures</li>
+      </ul>
+    </div>
+    <div class="card accent4">
+      <div class="card-title"><span class="icon">✅</span> When Future is Enough</div>
+      <ul class="feature-list">
+        <li>Single async task, simple result retrieval</li>
+        <li>Batch processing with invokeAll</li>
+        <li>Task cancellation (cancel() is well-supported)</li>
+        <li>Simple timeout scenarios</li>
+        <li>When you don't need callbacks or chaining</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>4. ScheduledFuture — Delayed & Periodic Tasks</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ScheduledFutureDemo.java</span><span class="code-lang">JAVA</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cls">ScheduledExecutorService</span> scheduler = <span class="cls">Executors</span>.<span class="fn">newScheduledThreadPool</span>(<span class="num">4</span>);
+
+<span class="cmt">// One-shot delay</span>
+<span class="cls">ScheduledFuture</span>&lt;<span class="cls">String</span>&gt; delayed = scheduler.<span class="fn">schedule</span>(
+    () -> <span class="str">"delayed result"</span>, <span class="num">5</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+<span class="cls">String</span> result = delayed.<span class="fn">get</span>(); <span class="cmt">// blocks max 5s</span>
+
+<span class="cmt">// Fixed rate — every 30s regardless of task duration</span>
+<span class="cls">ScheduledFuture</span>&lt;?&gt; heartbeat = scheduler.<span class="fn">scheduleAtFixedRate</span>(
+    () -> healthCheckService.<span class="fn">ping</span>(),
+    <span class="num">0</span>, <span class="num">30</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+
+<span class="cmt">// Fixed delay — 30s AFTER previous task completes</span>
+<span class="cls">ScheduledFuture</span>&lt;?&gt; cleanup = scheduler.<span class="fn">scheduleWithFixedDelay</span>(
+    () -> cacheService.<span class="fn">evictExpired</span>(),
+    <span class="num">1</span>, <span class="num">30</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+
+<span class="cmt">// Check when next execution is scheduled</span>
+<span class="kw">long</span> nextRunMs = heartbeat.<span class="fn">getDelay</span>(<span class="cls">TimeUnit</span>.<span class="fn">MILLISECONDS</span>);
+
+<span class="cmt">// Graceful cancel on shutdown</span>
+<span class="kw">Runtime</span>.<span class="fn">getRuntime</span>().<span class="fn">addShutdownHook</span>(<span class="kw">new</span> <span class="cls">Thread</span>(() -> {
+    heartbeat.<span class="fn">cancel</span>(<span class="kw">false</span>); <span class="cmt">// let current run finish</span>
+    cleanup.<span class="fn">cancel</span>(<span class="kw">false</span>);
+    scheduler.<span class="fn">shutdown</span>();
+}));</pre>
+  </div>
+</section>
+
+<!-- ===== COMPLETABLEFUTURE DEEP DIVE ===== -->
+<section class="section" id="completable_deep">
+  <div class="section-header">
+    <div class="section-tag">Deep Dive 04 — CompletableFuture</div>
+    <h1 class="section-title">CompletableFuture<br>Deep Dive</h1>
+    <p class="section-desc">Java 8's CompletableFuture is the most powerful async abstraction in standard Java. It implements both Future and CompletionStage — enabling composable, non-blocking pipelines with 50+ methods.</p>
+  </div>
+
+  <h2>1. Creation Methods</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CF_Creation.java</span><span class="code-lang">JAVA 8+</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// ── From a supplier (async execution) ────────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">String</span>&gt; cf1 = <span class="cls">CompletableFuture</span>
+    .<span class="fn">supplyAsync</span>(() -> dbRepo.<span class="fn">findUser</span>(id), executor);  <span class="cmt">// with custom pool</span>
+
+<span class="cmt">// ── From void task ────────────────────────────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">Void</span>&gt; cf2 = <span class="cls">CompletableFuture</span>
+    .<span class="fn">runAsync</span>(() -> auditLog.<span class="fn">write</span>(event), executor);
+
+<span class="cmt">// ── Already completed (useful in tests / fallbacks) ───────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">String</span>&gt; done     = <span class="cls">CompletableFuture</span>.<span class="fn">completedFuture</span>(<span class="str">"cached-value"</span>);
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">String</span>&gt; failed   = <span class="cls">CompletableFuture</span>.<span class="fn">failedFuture</span>(<span class="kw">new</span> <span class="cls">RuntimeException</span>(<span class="str">"oops"</span>));
+
+<span class="cmt">// ── Manual completion (promise pattern) ───────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">String</span>&gt; promise = <span class="kw">new</span> <span class="cls">CompletableFuture</span>&lt;&gt;();
+someCallback.<span class="fn">onSuccess</span>(result -> promise.<span class="fn">complete</span>(result));
+someCallback.<span class="fn">onError</span>(ex -> promise.<span class="fn">completeExceptionally</span>(ex));
+<span class="cmt">// Promise pattern — bridges callback-based APIs into CF world</span></pre>
+  </div>
+
+  <h2>2. Transformation Methods</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CF_Transform.java</span><span class="code-lang">JAVA 8+</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt; userCF = <span class="fn">fetchUserAsync</span>(userId);
+
+<span class="cmt">// thenApply — sync transform (Function&lt;T,U&gt;)</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">String</span>&gt; nameCF = userCF.<span class="fn">thenApply</span>(<span class="cls">UserProfile</span>::<span class="fn">getDisplayName</span>);
+
+<span class="cmt">// thenApplyAsync — async transform on different thread</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">EnrichedProfile</span>&gt; enrichedCF =
+    userCF.<span class="fn">thenApplyAsync</span>(user -> enrichmentSvc.<span class="fn">enrich</span>(user), ioExecutor);
+
+<span class="cmt">// thenCompose — flatMap: returns another CF (avoid CF&lt;CF&lt;T&gt;&gt;)</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">List</span>&lt;<span class="cls">Order</span>&gt;&gt; ordersCF =
+    userCF.<span class="fn">thenCompose</span>(user -> <span class="fn">fetchOrdersAsync</span>(user.<span class="fn">getId</span>()));
+<span class="cmt">// Use thenCompose when the next step itself returns a CF</span>
+<span class="cmt">// Use thenApply  when the next step returns a plain value</span>
+
+<span class="cmt">// thenAccept — consume result (Consumer&lt;T&gt;), returns CF&lt;Void&gt;</span>
+userCF.<span class="fn">thenAccept</span>(user -> cache.<span class="fn">put</span>(userId, user));
+
+<span class="cmt">// thenRun — run side-effect after completion, no access to result</span>
+userCF.<span class="fn">thenRun</span>(() -> metrics.<span class="fn">increment</span>(<span class="str">"user.fetch.success"</span>));
+
+<span class="cmt">// whenComplete — both success and failure, result passes through</span>
+userCF.<span class="fn">whenComplete</span>((user, ex) -> {
+    <span class="kw">if</span> (ex != <span class="kw">null</span>) metrics.<span class="fn">increment</span>(<span class="str">"user.fetch.error"</span>);
+    <span class="kw">else</span>         metrics.<span class="fn">increment</span>(<span class="str">"user.fetch.ok"</span>);
+}); <span class="cmt">// result/exception still propagated downstream</span></pre>
+  </div>
+
+  <h2>3. Error Handling</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CF_ErrorHandling.java</span><span class="code-lang">JAVA 8+ — Production Critical</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt; cf = <span class="fn">fetchUserAsync</span>(id);
+
+<span class="cmt">// exceptionally — recover from error, provide fallback</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt; withFallback = cf
+    .<span class="fn">exceptionally</span>(ex -> {
+        log.<span class="fn">warn</span>(<span class="str">"Fetch failed, using fallback: {}"</span>, ex.getMessage());
+        <span class="kw">return</span> <span class="cls">UserProfile</span>.<span class="fn">anonymous</span>(); <span class="cmt">// fallback value</span>
+    });
+
+<span class="cmt">// handle — both success and failure paths, transform result</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">Optional</span>&lt;<span class="cls">UserProfile</span>&gt;&gt; safeResult = cf
+    .<span class="fn">handle</span>((user, ex) -> {
+        <span class="kw">if</span> (ex != <span class="kw">null</span>) <span class="kw">return</span> <span class="cls">Optional</span>.&lt;<span class="cls">UserProfile</span>&gt;<span class="fn">empty</span>();
+        <span class="kw">return</span> <span class="cls">Optional</span>.<span class="fn">of</span>(user);
+    });
+
+<span class="cmt">// exceptionallyCompose (Java 12+) — async recovery</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt; asyncFallback = cf
+    .<span class="fn">exceptionallyCompose</span>(ex -> <span class="fn">fetchFromCacheAsync</span>(id));
+
+<span class="cmt">// Retry with CF</span>
+<span class="kw">public static</span> &lt;<span class="typ">T</span>&gt; <span class="cls">CompletableFuture</span>&lt;<span class="typ">T</span>&gt; <span class="fn">withRetry</span>(
+        <span class="cls">Supplier</span>&lt;<span class="cls">CompletableFuture</span>&lt;<span class="typ">T</span>&gt;&gt; supplier, <span class="kw">int</span> retries) {
+    <span class="kw">return</span> supplier.<span class="fn">get</span>().<span class="fn">exceptionallyCompose</span>(ex -> {
+        <span class="kw">if</span> (retries > <span class="num">0</span>) <span class="kw">return</span> <span class="fn">withRetry</span>(supplier, retries - <span class="num">1</span>);
+        <span class="kw">return</span> <span class="cls">CompletableFuture</span>.<span class="fn">failedFuture</span>(ex);
+    });
+}
+
+<span class="cmt">// Usage:</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">User</span>&gt; reliableFetch = <span class="fn">withRetry</span>(() -> <span class="fn">fetchUserAsync</span>(id), <span class="num">3</span>);</pre>
+  </div>
+
+  <h2>4. Combining Multiple CompletableFutures</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CF_Combining.java</span><span class="code-lang">JAVA 8+ — Real-World Patterns</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// ── thenCombine — merge 2 independent CFs ────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt; userCF  = <span class="fn">fetchUserAsync</span>(userId);
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">AccountInfo</span>&gt; acctCF  = <span class="fn">fetchAccountAsync</span>(userId);
+
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">DashboardDTO</span>&gt; dashboard =
+    userCF.<span class="fn">thenCombine</span>(acctCF, (user, acct) ->
+        <span class="cls">DashboardDTO</span>.<span class="fn">of</span>(user, acct)); <span class="cmt">// runs both in parallel</span>
+
+<span class="cmt">// ── allOf — wait for ALL to complete ─────────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">UserProfile</span>&gt;   user    = <span class="fn">fetchUserAsync</span>(id);
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">List</span>&lt;<span class="cls">Order</span>&gt;&gt;   orders  = <span class="fn">fetchOrdersAsync</span>(id);
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">WalletBalance</span>&gt; wallet  = <span class="fn">fetchWalletAsync</span>(id);
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">LoyaltyPoints</span>&gt; loyalty = <span class="fn">fetchLoyaltyAsync</span>(id);
+
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">FullDashboard</span>&gt; full =
+    <span class="cls">CompletableFuture</span>.<span class="fn">allOf</span>(user, orders, wallet, loyalty)
+        .<span class="fn">thenApply</span>(v -> <span class="cls">FullDashboard</span>.<span class="fn">of</span>(
+            user.<span class="fn">join</span>(),    <span class="cmt">// join() = get() without checked exception</span>
+            orders.<span class="fn">join</span>(),
+            wallet.<span class="fn">join</span>(),
+            loyalty.<span class="fn">join</span>()
+        ));
+<span class="cmt">// allOf() itself returns CF&lt;Void&gt; — use join() on individual CFs to extract values</span>
+
+<span class="cmt">// ── anyOf — first wins ────────────────────────────────────────────────</span>
+<span class="cls">CompletableFuture</span>&lt;<span class="cls">Object</span>&gt; fastest = <span class="cls">CompletableFuture</span>.<span class="fn">anyOf</span>(
+    <span class="fn">fetchFromPrimaryDC</span>(key),
+    <span class="fn">fetchFromSecondaryDC</span>(key),
+    <span class="fn">fetchFromEdgeCache</span>(key)
+);
+<span class="cls">String</span> data = (<span class="cls">String</span>) fastest.<span class="fn">get</span>(<span class="num">2</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>);
+
+<span class="cmt">// ── Type-safe allOf pattern (Java helper) ─────────────────────────────</span>
+<span class="kw">public static</span> &lt;<span class="typ">T</span>&gt; <span class="cls">CompletableFuture</span>&lt;<span class="cls">List</span>&lt;<span class="typ">T</span>&gt;&gt; <span class="fn">allOfList</span>(<span class="cls">List</span>&lt;<span class="cls">CompletableFuture</span>&lt;<span class="typ">T</span>&gt;&gt; cfs) {
+    <span class="kw">return</span> <span class="cls">CompletableFuture</span>
+        .<span class="fn">allOf</span>(cfs.<span class="fn">toArray</span>(<span class="kw">new</span> <span class="cls">CompletableFuture</span>[<span class="num">0</span>]))
+        .<span class="fn">thenApply</span>(v -> cfs.<span class="fn">stream</span>().<span class="fn">map</span>(<span class="cls">CompletableFuture</span>::<span class="fn">join</span>).<span class="fn">toList</span>());
+}</pre>
+  </div>
+
+  <h2>5. Real-World Pipeline — Order Processing Service</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">OrderProcessingPipeline.java</span><span class="code-lang">JAVA — Production Example</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="ann">@Service</span>
+<span class="kw">public class</span> <span class="cls">OrderProcessingService</span> {
+
+    <span class="ann">@Autowired</span> <span class="kw">private</span> <span class="cls">ExecutorService</span> ioExecutor;
+    <span class="ann">@Autowired</span> <span class="kw">private</span> <span class="cls">ExecutorService</span> cpuExecutor;
+
+    <span class="kw">public</span> <span class="cls">CompletableFuture</span>&lt;<span class="cls">OrderConfirmation</span>&gt; <span class="fn">processOrder</span>(<span class="cls">OrderRequest</span> req) {
+        <span class="kw">return</span> <span class="cls">CompletableFuture</span>
+            .<span class="fn">supplyAsync</span>(() -> <span class="fn">validateOrder</span>(req), cpuExecutor)
+            .<span class="fn">thenApplyAsync</span>(valid -> <span class="fn">checkInventory</span>(valid), ioExecutor)
+            .<span class="fn">thenCombineAsync</span>(
+                <span class="fn">reservePayment</span>(req),    <span class="cmt">// run inventory check + payment in parallel</span>
+                (inv, payment) -> <span class="fn">createOrderRecord</span>(req, inv, payment),
+                ioExecutor
+            )
+            .<span class="fn">thenApplyAsync</span>(order -> <span class="fn">assignWarehouse</span>(order), ioExecutor)
+            .<span class="fn">thenApplyAsync</span>(order -> <span class="fn">scheduleShipping</span>(order), ioExecutor)
+            .<span class="fn">thenApply</span>(<span class="cls">OrderConfirmation</span>::<span class="fn">from</span>)
+            .<span class="fn">whenComplete</span>((conf, ex) -> {
+                <span class="kw">if</span> (ex != <span class="kw">null</span>) <span class="fn">publishOrderFailed</span>(req.<span class="fn">getId</span>(), ex);
+                <span class="kw">else</span> <span class="fn">publishOrderConfirmed</span>(conf);
+            })
+            .<span class="fn">orTimeout</span>(<span class="num">10</span>, <span class="cls">TimeUnit</span>.<span class="fn">SECONDS</span>)     <span class="cmt">// Java 9+</span>
+            .<span class="fn">exceptionally</span>(ex -> <span class="cls">OrderConfirmation</span>.<span class="fn">failed</span>(req.<span class="fn">getId</span>(), ex));
+    }
+}</pre>
+  </div>
+
+  <h2>6. Key Methods Summary</h2>
+  <table class="compare-table">
+    <tr><th>Method</th><th>Input → Output</th><th>Thread</th><th>Use For</th></tr>
+    <tr><td>thenApply</td><td>Function&lt;T,U&gt;</td><td>Same</td><td>Sync transform</td></tr>
+    <tr><td>thenApplyAsync</td><td>Function&lt;T,U&gt;</td><td>Pool</td><td>Async transform</td></tr>
+    <tr><td>thenCompose</td><td>T → CF&lt;U&gt;</td><td>Same</td><td>flatMap / chain CFs</td></tr>
+    <tr><td>thenCombine</td><td>BiFunction&lt;T,U,V&gt;</td><td>Same</td><td>Merge 2 CFs</td></tr>
+    <tr><td>thenAccept</td><td>Consumer&lt;T&gt;</td><td>Same</td><td>Side-effect, no return</td></tr>
+    <tr><td>thenRun</td><td>Runnable</td><td>Same</td><td>Side-effect, no result access</td></tr>
+    <tr><td>exceptionally</td><td>Throwable → T</td><td>Same</td><td>Error recovery / fallback</td></tr>
+    <tr><td>handle</td><td>BiFunction&lt;T,Throwable,U&gt;</td><td>Same</td><td>Handle both paths</td></tr>
+    <tr><td>whenComplete</td><td>BiConsumer&lt;T,Throwable&gt;</td><td>Same</td><td>Observe, pass-through</td></tr>
+    <tr><td>allOf</td><td>CF[] → CF&lt;Void&gt;</td><td>—</td><td>Wait for all</td></tr>
+    <tr><td>anyOf</td><td>CF[] → CF&lt;Object&gt;</td><td>—</td><td>First to finish wins</td></tr>
+    <tr><td>orTimeout</td><td>long, TimeUnit</td><td>—</td><td>Auto-fail after timeout (Java 9)</td></tr>
+    <tr><td>completeOnTimeout</td><td>value, long, unit</td><td>—</td><td>Default value on timeout (Java 9)</td></tr>
+  </table>
+
+  <div class="alert alert-warn">
+    <span class="alert-icon">⚠️</span>
+    <div><strong>join() vs get():</strong> <code>join()</code> throws unchecked <code>CompletionException</code>; <code>get()</code> throws checked <code>ExecutionException</code>. Use <code>join()</code> inside lambda chains (no try-catch needed), use <code>get(timeout, unit)</code> at the top-level call site with explicit timeout handling.</div>
+  </div>
+</section>
+
+<!-- ===== FORK JOIN POOL ===== -->
+<section class="section" id="forkjoin">
+  <div class="section-header">
+    <div class="section-tag">Deep Dive 05 — ForkJoin</div>
+    <h1 class="section-title">ForkJoinPool<br>& Parallelism</h1>
+    <p class="section-desc">ForkJoinPool is Java's divide-and-conquer parallel execution framework. It uses work-stealing to keep all CPU cores busy, making it ideal for recursive, CPU-bound computation tasks.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="icon">🔱</span> How It Works</div>
+      <p>ForkJoinPool uses <strong>work-stealing</strong>: each worker thread has its own deque of tasks. When idle, a thread steals from the tail of another thread's deque — maximizing CPU utilization without contention.</p>
+    </div>
+    <div class="card accent3">
+      <div class="card-title"><span class="icon">📐</span> Fork/Join Pattern</div>
+      <ul class="feature-list">
+        <li><strong>fork()</strong> — submit a subtask asynchronously</li>
+        <li><strong>join()</strong> — wait for subtask result</li>
+        <li><strong>compute()</strong> — override: split or solve directly</li>
+        <li>Base case: when small enough, solve sequentially</li>
+        <li>Recursive case: split into sub-tasks, fork, join</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>1. RecursiveTask — Returns a Result</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ParallelMergeSort.java</span><span class="code-lang">JAVA — RecursiveTask</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="kw">import</span> java.util.concurrent.*;
+
+<span class="cmt">// Classic example: parallel sum of large array</span>
+<span class="kw">public class</span> <span class="cls">ParallelArraySum</span> <span class="kw">extends</span> <span class="cls">RecursiveTask</span>&lt;<span class="cls">Long</span>&gt; {
+
+    <span class="kw">private static final int</span> THRESHOLD = <span class="num">10_000</span>; <span class="cmt">// tune per task complexity</span>
+    <span class="kw">private final long</span>[] array;
+    <span class="kw">private final int</span>  start, end;
+
+    <span class="kw">public</span> <span class="fn">ParallelArraySum</span>(<span class="kw">long</span>[] array, <span class="kw">int</span> start, <span class="kw">int</span> end) {
+        <span class="kw">this</span>.array = array;
+        <span class="kw">this</span>.start = start;
+        <span class="kw">this</span>.end   = end;
+    }
+
+    <span class="ann">@Override</span>
+    <span class="kw">protected</span> <span class="cls">Long</span> <span class="fn">compute</span>() {
+        <span class="kw">int</span> size = end - start;
+
+        <span class="cmt">// Base case: small enough → compute sequentially</span>
+        <span class="kw">if</span> (size <= THRESHOLD) {
+            <span class="kw">long</span> sum = <span class="num">0</span>;
+            <span class="kw">for</span> (<span class="kw">int</span> i = start; i < end; i++) sum += array[i];
+            <span class="kw">return</span> sum;
+        }
+
+        <span class="cmt">// Recursive case: split in half</span>
+        <span class="kw">int</span> mid = start + size / <span class="num">2</span>;
+        <span class="cls">ParallelArraySum</span> left  = <span class="kw">new</span> <span class="cls">ParallelArraySum</span>(array, start, mid);
+        <span class="cls">ParallelArraySum</span> right = <span class="kw">new</span> <span class="cls">ParallelArraySum</span>(array, mid, end);
+
+        left.<span class="fn">fork</span>();                    <span class="cmt">// async: submit left half</span>
+        <span class="kw">long</span> rightResult = right.<span class="fn">compute</span>(); <span class="cmt">// compute right half on THIS thread</span>
+        <span class="kw">long</span> leftResult  = left.<span class="fn">join</span>();     <span class="cmt">// wait for left half</span>
+
+        <span class="kw">return</span> leftResult + rightResult;
+        <span class="cmt">// Key: fork left, compute right inline (avoids unnecessary thread switch)</span>
+    }
+
+    <span class="kw">public static void</span> <span class="fn">main</span>(<span class="cls">String</span>[] args) {
+        <span class="kw">long</span>[] data = <span class="fn">generateData</span>(<span class="num">100_000_000</span>); <span class="cmt">// 100M elements</span>
+
+        <span class="cls">ForkJoinPool</span> pool = <span class="kw">new</span> <span class="cls">ForkJoinPool</span>(); <span class="cmt">// parallelism = N_CPU - 1</span>
+        <span class="kw">long</span> sum = pool.<span class="fn">invoke</span>(<span class="kw">new</span> <span class="cls">ParallelArraySum</span>(data, <span class="num">0</span>, data.length));
+        <span class="cls">System</span>.out.<span class="fn">println</span>(<span class="str">"Sum: "</span> + sum);
+    }
+}</pre>
+  </div>
+
+  <h2>2. RecursiveAction — No Return Value</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ParallelImageProcessor.java</span><span class="code-lang">JAVA — RecursiveAction</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="kw">public class</span> <span class="cls">ImageBlurTask</span> <span class="kw">extends</span> <span class="cls">RecursiveAction</span> {
+
+    <span class="kw">private static final int</span> THRESHOLD = <span class="num">256</span>; <span class="cmt">// 256 pixels per task</span>
+    <span class="kw">private final int</span>[] pixels;
+    <span class="kw">private final int</span>   start, end;
+
+    <span class="kw">public</span> <span class="fn">ImageBlurTask</span>(<span class="kw">int</span>[] pixels, <span class="kw">int</span> start, <span class="kw">int</span> end) {
+        <span class="kw">this</span>.pixels = pixels;
+        <span class="kw">this</span>.start  = start;
+        <span class="kw">this</span>.end    = end;
+    }
+
+    <span class="ann">@Override</span>
+    <span class="kw">protected void</span> <span class="fn">compute</span>() {
+        <span class="kw">if</span> (end - start <= THRESHOLD) {
+            <span class="fn">applyBlurFilter</span>(pixels, start, end); <span class="cmt">// direct computation</span>
+            <span class="kw">return</span>;
+        }
+        <span class="kw">int</span> mid = (start + end) / <span class="num">2</span>;
+        <span class="cls">ImageBlurTask</span> t1 = <span class="kw">new</span> <span class="cls">ImageBlurTask</span>(pixels, start, mid);
+        <span class="cls">ImageBlurTask</span> t2 = <span class="kw">new</span> <span class="cls">ImageBlurTask</span>(pixels, mid, end);
+
+        <span class="cmt">// invokeAll — forks both and joins both</span>
+        <span class="fn">invokeAll</span>(t1, t2);
+    }
+}
+
+<span class="cmt">// Submit to custom pool</span>
+<span class="cls">ForkJoinPool</span> pool = <span class="kw">new</span> <span class="cls">ForkJoinPool</span>(<span class="num">8</span>); <span class="cmt">// explicit parallelism</span>
+pool.<span class="fn">invoke</span>(<span class="kw">new</span> <span class="cls">ImageBlurTask</span>(pixels, <span class="num">0</span>, pixels.length));</pre>
+  </div>
+
+  <h2>3. Common Pool & Parallel Streams</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">CommonPool.java</span><span class="code-lang">JAVA 8+</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// ForkJoinPool.commonPool() — shared JVM-wide pool
+// Used by: parallel streams, CompletableFuture.supplyAsync (without executor),
+//          Arrays.parallelSort, etc.</span>
+
+<span class="kw">int</span> parallelism = <span class="cls">ForkJoinPool</span>.<span class="fn">commonPool</span>().<span class="fn">getParallelism</span>();
+<span class="cmt">// Default = Runtime.getRuntime().availableProcessors() - 1</span>
+
+<span class="cmt">// ── Parallel Streams (uses commonPool under the hood) ─────────────────</span>
+<span class="cls">List</span>&lt;<span class="cls">ProductDTO</span>&gt; dtos = products.<span class="fn">parallelStream</span>()   <span class="cmt">// parallel processing</span>
+    .<span class="fn">filter</span>(<span class="cls">Product</span>::<span class="fn">isActive</span>)
+    .<span class="fn">map</span>(productMapper::<span class="fn">toDTO</span>)
+    .<span class="fn">sorted</span>(<span class="cls">Comparator</span>.<span class="fn">comparing</span>(<span class="cls">ProductDTO</span>::<span class="fn">getPrice</span>))
+    .<span class="fn">collect</span>(<span class="cls">Collectors</span>.<span class="fn">toList</span>());
+
+<span class="cmt">// ── Custom pool for parallel stream — CRITICAL for production ─────────</span>
+<span class="cmt">// Never use commonPool for I/O tasks — will starve other operations!</span>
+<span class="cls">ForkJoinPool</span> customPool = <span class="kw">new</span> <span class="cls">ForkJoinPool</span>(<span class="num">16</span>);
+<span class="cls">List</span>&lt;<span class="cls">Result</span>&gt; results = customPool.<span class="fn">submit</span>(() ->
+    dataList.<span class="fn">parallelStream</span>()
+        .<span class="fn">map</span>(<span class="kw">this</span>::<span class="fn">processItem</span>)
+        .<span class="fn">collect</span>(<span class="cls">Collectors</span>.<span class="fn">toList</span>())
+).<span class="fn">get</span>();
+
+<span class="cmt">// ── Arrays.parallelSort ───────────────────────────────────────────────</span>
+<span class="kw">long</span>[] bigArray = <span class="fn">generateData</span>(<span class="num">10_000_000</span>);
+<span class="cls">Arrays</span>.<span class="fn">parallelSort</span>(bigArray); <span class="cmt">// uses ForkJoinPool.commonPool()</span>
+
+<span class="cmt">// ── Arrays.parallelPrefix — prefix sum (running total) ────────────────</span>
+<span class="kw">int</span>[] prices = {<span class="num">10</span>, <span class="num">20</span>, <span class="num">15</span>, <span class="num">30</span>, <span class="num">5</span>};
+<span class="cls">Arrays</span>.<span class="fn">parallelPrefix</span>(prices, <span class="cls">Integer</span>::sum);
+<span class="cmt">// prices = [10, 30, 45, 75, 80] — running sum, done in parallel</span></pre>
+  </div>
+
+  <h2>4. ForkJoinPool Configuration in Spring Boot</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ForkJoinConfig.java</span><span class="code-lang">SPRING BOOT — Production</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="ann">@Configuration</span>
+<span class="kw">public class</span> <span class="cls">ForkJoinConfig</span> {
+
+    <span class="ann">@Bean</span>(<span class="str">"computePool"</span>)
+    <span class="kw">public</span> <span class="cls">ForkJoinPool</span> <span class="fn">computePool</span>() {
+        <span class="kw">int</span> cpus = <span class="cls">Runtime</span>.<span class="fn">getRuntime</span>().<span class="fn">availableProcessors</span>();
+        <span class="kw">return new</span> <span class="cls">ForkJoinPool</span>(
+            cpus,                          <span class="cmt">// parallelism level</span>
+            <span class="cls">ForkJoinPool</span>.<span class="fn">defaultForkJoinWorkerThreadFactory</span>,
+            (<span class="cls">Thread</span> t, <span class="cls">Throwable</span> ex) ->
+                log.<span class="fn">error</span>(<span class="str">"ForkJoin worker [{}] died"</span>, t.getName(), ex),
+            <span class="kw">true</span>                          <span class="cmt">// asyncMode: FIFO for non-forked tasks</span>
+        );
+    }
+}
+
+<span class="cmt">// Control commonPool parallelism via system property:
+// -Djava.util.concurrent.ForkJoinPool.common.parallelism=4
+// Useful to prevent commonPool from consuming all cores</span>
+
+<span class="cmt">// Monitor ForkJoinPool health</span>
+<span class="cls">ForkJoinPool</span> pool = <span class="fn">computePool</span>();
+log.<span class="fn">info</span>(<span class="str">"FJP stats — active:{} running:{} queued:{} steal:{}"</span>,
+    pool.<span class="fn">getActiveThreadCount</span>(),
+    pool.<span class="fn">getRunningThreadCount</span>(),
+    pool.<span class="fn">getQueuedTaskCount</span>(),
+    pool.<span class="fn">getStealCount</span>()); <span class="cmt">// stealCount = work-stealing in action</span></pre>
+  </div>
+
+  <h2>5. When to Use Each</h2>
+  <table class="compare-table">
+    <tr><th>Scenario</th><th>Best Choice</th><th>Why</th></tr>
+    <tr><td>CPU-bound recursive computation</td><td>ForkJoinPool + RecursiveTask</td><td>Work-stealing, optimal CPU use</td></tr>
+    <tr><td>CPU-bound bulk data processing</td><td>parallelStream() with custom FJP</td><td>Simpler API, same power</td></tr>
+    <tr><td>I/O-bound parallel tasks</td><td>ThreadPoolExecutor (I/O pool)</td><td>FJP not designed for blocking</td></tr>
+    <tr><td>Async pipeline with callbacks</td><td>CompletableFuture</td><td>Non-blocking composition</td></tr>
+    <tr><td>Simple background task</td><td>ExecutorService.submit(Callable)</td><td>Simple, Future result</td></tr>
+    <tr><td>Fire-and-forget</td><td>ExecutorService.execute(Runnable)</td><td>No overhead of Future</td></tr>
+    <tr><td>1M+ concurrent I/O tasks (Java 21)</td><td>Virtual Threads</td><td>Scales beyond thread pools</td></tr>
+  </table>
+
+  <div class="alert alert-danger">
+    <span class="alert-icon">🚫</span>
+    <div><strong>Don't do I/O in ForkJoinPool!</strong> Blocking calls (DB queries, HTTP, file reads) inside RecursiveTask or parallelStream will park carrier threads and starve the pool. ForkJoinPool excels at <strong>CPU-only</strong> tasks. Use <code>ManagedBlocker</code> interface if you must block inside a ForkJoinPool task.</div>
+  </div>
+
+  <h2>6. ManagedBlocker — Blocking Inside ForkJoinPool</h2>
+  <div class="code-block">
+    <div class="code-header"><span class="code-filename">ManagedBlockerDemo.java</span><span class="code-lang">JAVA — Advanced</span><button class="copy-btn">Copy</button></div>
+    <pre><span class="cmt">// When you MUST block inside FJP, signal it to add a compensating thread</span>
+<span class="kw">public static</span> &lt;<span class="typ">T</span>&gt; <span class="typ">T</span> <span class="fn">blockingGet</span>(<span class="cls">Supplier</span>&lt;<span class="typ">T</span>&gt; supplier) <span class="kw">throws</span> <span class="cls">InterruptedException</span> {
+    <span class="kw">final</span> <span class="cls">Object</span>[] result = <span class="kw">new</span> <span class="cls">Object</span>[<span class="num">1</span>];
+
+    <span class="cls">ForkJoinPool</span>.<span class="fn">managedBlock</span>(<span class="kw">new</span> <span class="cls">ForkJoinPool</span>.<span class="cls">ManagedBlocker</span>() {
+        <span class="kw">private boolean</span> done = <span class="kw">false</span>;
+
+        <span class="ann">@Override</span>
+        <span class="kw">public boolean</span> <span class="fn">block</span>() {
+            result[<span class="num">0</span>] = supplier.<span class="fn">get</span>(); <span class="cmt">// the blocking call</span>
+            done = <span class="kw">true</span>;
+            <span class="kw">return true</span>;
+        }
+
+        <span class="ann">@Override</span>
+        <span class="kw">public boolean</span> <span class="fn">isReleasable</span>() { <span class="kw">return</span> done; }
+    });
+
+    <span class="kw">return</span> (<span class="typ">T</span>) result[<span class="num">0</span>];
+    <span class="cmt">// FJP will spawn a compensating thread to maintain parallelism
+    // while this task is blocked — prevents pool starvation</span>
+}</pre>
+  </div>
+</section>
+
 </main>
 </div>
 
 <script>
-const sections = ['intro','lifecycle','creation','sync','volatile','waitnotify','executor','callable','completable','collections','problems','threadpool','production'];
+const sections = ['intro','lifecycle','creation','sync','volatile','waitnotify','executor','callable','completable','collections','problems','threadpool','production','runnable_deep','callable_deep','future_deep','completable_deep','forkjoin'];
 let visited = new Set(['intro']);
 
 function goto(id, el) {
